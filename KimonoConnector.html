@@ -1,0 +1,85 @@
+<html>
+<meta http-equiv="Cache-Control" content="no-store" />
+<head>
+<title>Kimono Connector</title>
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js" type="text/javascript"></script>
+<!-- <script src="https://public.tableau.com/javascripts/api/tableauwdc-1.1.0.js" type="text/javascript"></script> -->
+<script src="js/tableauwdc-1.1.0.js" type="text/javascript"></script>
+<script type="text/javascript">
+(function() {
+  var myConnector = tableau.makeConnector();
+
+  myConnector.getColumnHeaders = function() {
+    var formData = JSON.parse(tableau.connectionData);
+    kimonoAjax(formData.apiUrl + "&kimlimit=1", function(response) {
+      tableau.connectionName = response.name; // TODO doesn't work
+      var collection = response.results[formData.collection];
+      var fieldNames = [];
+      var fieldTypes = [];
+      for (fieldName in collection[0]) {
+        fieldNames.push(fieldName);
+        // TODO how to know the "real" type?
+        fieldTypes.push("string");
+      }
+      tableau.headersCallback(fieldNames, fieldTypes);
+    });
+  };
+
+  myConnector.getTableData = function(lastRecordToken) {
+    var formData = JSON.parse(tableau.connectionData);
+    kimonoAjax(formData.apiUrl, function(response) {
+      var collection = response.results[formData.collection];
+      var data = [];
+      for (var i = 0; i < collection.length; i++) {
+        var entry = {};
+        for (fieldName in collection[i]) {
+          var value = collection[i][fieldName];
+          entry[fieldName] = value.text || value;
+        }
+        data.push(entry);
+      }
+      tableau.dataCallback(data, null, false);
+    });
+  };
+
+  function kimonoAjax(url, onSuccess) {
+    $.ajax({
+      url: url,
+      crossDomain: true,
+      dataType: "jsonp",
+      success: onSuccess,
+      error: function(xhr, ajaxOptions, thrownError) {
+        tableau.log("connection error: " + xhr.responseText + "\n" + thrownError);
+        tableau.abortWithError("error connecting to the Kimono API data source");
+      }
+    });
+  };
+
+  $(document).ready(function() {
+    $("#submitButton").click(function() {
+      var apiUrl = $("input[name='apiUrl']").val().trim();
+      var collection = $("input[name='collection']").val().trim();
+      if (apiUrl) {
+        myConnector.setApiUrl(apiUrl, collection);
+        tableau.submit();
+      }
+    });
+  });
+
+  myConnector.setApiUrl = function(apiUrl, collection) {
+    tableau.connectionData = JSON.stringify({ apiUrl: apiUrl, collection: collection });
+    // name the data source. This will be the data source name in Tableau
+    // TODO should use the API name available in the json metadata
+    tableau.connectionName = 'Kimono API: ' + apiUrl;
+  };
+
+  tableau.registerConnector(myConnector);
+})();
+</script>
+</head>
+<body>
+  Paste "json" endpoint link from API detail page: <input type="text" name="apiUrl" style="width: 300px;" /> <br>
+  Collection name: <input type="text" name="collection" value="collection1" style="width: 200px;" /> <br>
+  <button type="button" id="submitButton">Get Data</button>
+</body>
+</html>
